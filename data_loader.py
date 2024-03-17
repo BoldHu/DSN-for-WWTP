@@ -1,35 +1,35 @@
 import torch.utils.data as data
-from PIL import Image
 import os
-
+import scipy.io as sio
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+import torch
 
 class GetLoader(data.Dataset):
-    def __init__(self, data_root, data_list, transform=None):
-        self.root = data_root
+    def __init__(self, data_root, data_label_root, transform=None):
+        self.data_root = os.path.join("./Data", data_root)
+        self.data_label_root = os.path.join("./Data", data_label_root)
         self.transform = transform
-
-        f = open(data_list, 'r')
-        data_list = f.readlines()
-        f.close()
-
-        self.n_data = len(data_list)
-
-        self.img_paths = []
-        self.img_labels = []
-
-        for data in data_list:
-            self.img_paths.append(data[:-3])
-            self.img_labels.append(data[-2])
-
+        
+        # load data
+        self.data = sio.loadmat(self.data_root)['data']
+        self.data_label = sio.loadmat(self.data_label_root)['EQvec']
+        
+        # transform the data and labels: standardize
+        if self.transform:
+            scaler = StandardScaler()
+            self.data = scaler.fit_transform(self.data)
+        
     def __getitem__(self, item):
-        img_paths, labels = self.img_paths[item], self.img_labels[item]
-        imgs = Image.open(os.path.join(self.root, img_paths)).convert('RGB')
-
-        if self.transform is not None:
-            imgs = self.transform(imgs)
-            labels = int(labels)
-
-        return imgs, labels
-
+        d = self.data[item]
+        l = self.data_label[item]
+        
+        # convert to tensor
+        d = torch.tensor(d, dtype=torch.float32)
+        l = torch.tensor(l, dtype=torch.float32)
+        
+        return d, l
+    
     def __len__(self):
-        return self.n_data
+        return len(self.data)
+        
