@@ -16,14 +16,15 @@ from test import test
 # params             #
 ######################
 
-source_image_root = os.path.join('.', 'dataset', 'mnist')
-target_image_root = os.path.join('.', 'dataset', 'mnist_m')
-model_root = 'model'
+source_dataset_name = 'X_kla120.mat'
+target_dataset_name = 'X_kla240.mat'
+source_dataset_labels_name = 'EQvec_kla120.mat'
+target_dataset_labels_name = 'EQvec_kla240.mat'
+model_root = 'models'
 cuda = True
 cudnn.benchmark = True
 lr = 1e-2
 batch_size = 32
-image_size = 28
 n_epoch = 100
 step_decay_weight = 0.95
 lr_decay_step = 20000
@@ -34,47 +35,30 @@ beta_weight = 0.075
 gamma_weight = 0.25
 momentum = 0.9
 
-manual_seed = random.randint(1, 10000)
-random.seed(manual_seed)
-torch.manual_seed(manual_seed)
+random.seed(42)
+torch.manual_seed(42)
 
 #######################
 # load data           #
 #######################
 
-img_transform = transforms.Compose([
-    transforms.Resize(image_size),
-    transforms.ToTensor(),
-    transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-])
+source_dataset = GetLoader(source_dataset_name, source_dataset_labels_name, transform=True)
+target_dataset = GetLoader(target_dataset_name, target_dataset_labels_name, transform=True)
 
-dataset_source = datasets.MNIST(
-    root=source_image_root,
-    train=True,
-    transform=img_transform
-)
-
+# create dataloaders
 dataloader_source = torch.utils.data.DataLoader(
-    dataset=dataset_source,
+    dataset=source_dataset,
     batch_size=batch_size,
     shuffle=True,
-    num_workers=8
-)
-
-train_list = os.path.join(target_image_root, 'mnist_m_train_labels.txt')
-
-dataset_target = GetLoader(
-    data_root=os.path.join(target_image_root, 'mnist_m_train'),
-    data_list=train_list,
-    transform=img_transform
-)
+    num_workers=32)
 
 dataloader_target = torch.utils.data.DataLoader(
-    dataset=dataset_target,
+    dataset=target_dataset,
     batch_size=batch_size,
     shuffle=True,
-    num_workers=8
-)
+    num_workers=32)
+
+print('read the data from the dataset')
 
 #####################
 #  load model       #
@@ -103,7 +87,7 @@ def exp_lr_scheduler(optimizer, step, init_lr=lr, lr_decay_step=lr_decay_step, s
 
 optimizer = optim.SGD(my_net.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
 
-loss_classification = torch.nn.CrossEntropyLoss()
+loss_reg = torch.nn.MSELoss()
 loss_recon1 = MSE()
 loss_recon2 = SIMSE()
 loss_diff = DiffLoss()
@@ -111,7 +95,7 @@ loss_similarity = torch.nn.CrossEntropyLoss()
 
 if cuda:
     my_net = my_net.cuda()
-    loss_classification = loss_classification.cuda()
+    loss_reg = loss_reg.cuda()
     loss_recon1 = loss_recon1.cuda()
     loss_recon2 = loss_recon2.cuda()
     loss_diff = loss_diff.cuda()
@@ -143,49 +127,39 @@ for epoch in range(n_epoch):
         ###################################
 
         data_target = data_target_iter.next()
-        t_img, t_label = data_target
+        target_feature, target_label = data_target
 
         my_net.zero_grad()
         loss = 0
-        batch_size = len(t_label)
+        batch_size = len(target_label)
 
-        input_img = torch.FloatTensor(batch_size, 3, image_size, image_size)
-        class_label = torch.LongTensor(batch_size)
         domain_label = torch.ones(batch_size)
         domain_label = domain_label.long()
 
         if cuda:
-            t_img = t_img.cuda()
-            t_label = t_label.cuda()
-            input_img = input_img.cuda()
-            class_label = class_label.cuda()
+            target_feature = target_feature.cuda()
+            target_label = target_label.cuda()
             domain_label = domain_label.cuda()
-
-        input_img.resize_as_(t_img).copy_(t_img)
-        class_label.resize_as_(t_label).copy_(t_label)
-        target_inputv_img = Variable(input_img)
-        target_classv_label = Variable(class_label)
-        target_domainv_label = Variable(domain_label)
 
         if current_step > active_domain_loss_step:
             p = float(i + (epoch - dann_epoch) * len_dataloader / (n_epoch - dann_epoch) / len_dataloader)
             p = 2. / (1. + np.exp(-10 * p)) - 1
 
             # activate domain loss
-            result = my_net(input_data=target_inputv_img, mode='target', rec_scheme='all', p=p)
+            result = my_net(input_data=target_feature, mode='target', rec_scheme='all', p=p)
             target_privte_code, target_share_code, target_domain_label, target_rec_code = result
-            target_dann = gamma_weight * loss_similarity(target_domain_label, target_domainv_label)
+            target_dann = gamma_weight * loss_similarity(target_domain_label, domain_label)
             loss += target_dann
         else:
             target_dann = Variable(torch.zeros(1).float().cuda())
-            result = my_net(input_data=target_inputv_img, mode='target', rec_scheme='all')
+            result = my_net(input_data=target_feature, mode='target', rec_scheme='all')
             target_privte_code, target_share_code, _, target_rec_code = result
 
         target_diff= beta_weight * loss_diff(target_privte_code, target_share_code)
         loss += target_diff
-        target_mse = alpha_weight * loss_recon1(target_rec_code, target_inputv_img)
+        target_mse = alpha_weight * loss_recon1(target_rec_code, target_feature)
         loss += target_mse
-        target_simse = alpha_weight * loss_recon2(target_rec_code, target_inputv_img)
+        target_simse = alpha_weight * loss_recon2(target_rec_code, target_feature)
         loss += target_simse
 
         loss.backward()
@@ -196,52 +170,41 @@ for epoch in range(n_epoch):
         ###################################
 
         data_source = data_source_iter.next()
-        s_img, s_label = data_source
+        source_feature, source_label = data_source
 
         my_net.zero_grad()
-        batch_size = len(s_label)
-
-        input_img = torch.FloatTensor(batch_size, 3, image_size, image_size)
-        class_label = torch.LongTensor(batch_size)
+        batch_size = len(source_label)
         domain_label = torch.zeros(batch_size)
         domain_label = domain_label.long()
 
         loss = 0
 
         if cuda:
-            s_img = s_img.cuda()
-            s_label = s_label.cuda()
-            input_img = input_img.cuda()
-            class_label = class_label.cuda()
+            source_feature = source_feature.cuda()
+            source_label = source_label.cuda()
             domain_label = domain_label.cuda()
-
-        input_img.resize_as_(input_img).copy_(s_img)
-        class_label.resize_as_(s_label).copy_(s_label)
-        source_inputv_img = Variable(input_img)
-        source_classv_label = Variable(class_label)
-        source_domainv_label = Variable(domain_label)
 
         if current_step > active_domain_loss_step:
 
             # activate domain loss
 
-            result = my_net(input_data=source_inputv_img, mode='source', rec_scheme='all', p=p)
+            result = my_net(input_data=source_feature, mode='source', rec_scheme='all', p=p)
             source_privte_code, source_share_code, source_domain_label, source_class_label, source_rec_code = result
-            source_dann = gamma_weight * loss_similarity(source_domain_label, source_domainv_label)
+            source_dann = gamma_weight * loss_similarity(source_domain_label, domain_label)
             loss += source_dann
         else:
             source_dann = Variable(torch.zeros(1).float().cuda())
-            result = my_net(input_data=source_inputv_img, mode='source', rec_scheme='all')
-            source_privte_code, source_share_code, _, source_class_label, source_rec_code = result
+            result = my_net(input_data=source_feature, mode='source', rec_scheme='all')
+            source_privte_code, source_share_code, _, source_reg, source_rec_code = result
 
-        source_classification = loss_classification(source_class_label, source_classv_label)
+        source_classification = loss_reg(source_reg, source_label)
         loss += source_classification
 
         source_diff = beta_weight * loss_diff(source_privte_code, source_share_code)
         loss += source_diff
-        source_mse = alpha_weight * loss_recon1(source_rec_code, source_inputv_img)
+        source_mse = alpha_weight * loss_recon1(source_rec_code, source_feature)
         loss += source_mse
-        source_simse = alpha_weight * loss_recon2(source_rec_code, source_inputv_img)
+        source_simse = alpha_weight * loss_recon2(source_rec_code, source_feature)
         loss += source_simse
 
         loss.backward()
