@@ -100,8 +100,3 @@ class DSN(nn.Module):
         result.append(rec_code)
 
         return result
-
-
-
-
-

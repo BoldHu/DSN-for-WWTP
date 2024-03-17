@@ -63,6 +63,3 @@ class DiffLoss(nn.Module):
         diff_loss = torch.mean((input1_l2.t().mm(input2_l2)).pow(2))
 
         return diff_loss
-
-
-

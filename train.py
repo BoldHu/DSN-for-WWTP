@@ -4,13 +4,9 @@ import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.utils.data
 import numpy as np
-from torch.autograd import Variable
-from torchvision import datasets
-from torchvision import transforms
 from model_compat import DSN
 from data_loader import GetLoader
 from functions import SIMSE, DiffLoss, MSE
-from test import test
 
 ######################
 # params             #
@@ -23,16 +19,16 @@ target_dataset_labels_name = 'EQvec_kla240.mat'
 model_root = 'models'
 cuda = True
 cudnn.benchmark = True
-lr = 1e-2
-batch_size = 32
+lr = 1e-10
+batch_size = 64
 n_epoch = 100
-step_decay_weight = 0.95
-lr_decay_step = 20000
-active_domain_loss_step = 10000
-weight_decay = 1e-6
-alpha_weight = 0.01
-beta_weight = 0.075
-gamma_weight = 0.25
+step_decay_weight = 0.9
+lr_decay_step = 10
+active_domain_loss_step = 0
+weight_decay = 1e-7
+alpha_weight = 0.001
+beta_weight = 0.01
+gamma_weight = 0.1
 momentum = 0.9
 
 random.seed(42)
@@ -126,8 +122,10 @@ for epoch in range(n_epoch):
         # target data training            #
         ###################################
 
-        data_target = data_target_iter.next()
+        data_target = next(data_target_iter)
         target_feature, target_label = data_target
+        print(target_feature.shape)
+        print(target_label.shape)
 
         my_net.zero_grad()
         loss = 0
@@ -147,19 +145,38 @@ for epoch in range(n_epoch):
 
             # activate domain loss
             result = my_net(input_data=target_feature, mode='target', rec_scheme='all', p=p)
+            # print(result[0])
+            # print(result[0].shape)
+            # print(result[1])
+            # print(result[1].shape)
+            # print(result[2])
+            # print(result[2].shape)
+            # print(result[3])
+            # print(result[3].shape)
             target_privte_code, target_share_code, target_domain_label, target_rec_code = result
             target_dann = gamma_weight * loss_similarity(target_domain_label, domain_label)
             loss += target_dann
         else:
-            target_dann = Variable(torch.zeros(1).float().cuda())
+            target_dann = torch.zeros(1).float().cuda()
             result = my_net(input_data=target_feature, mode='target', rec_scheme='all')
+            # print(result[0])
+            # print(result[0].shape)
+            # print(result[1])
+            # print(result[1].shape)
+            # print(result[2])
+            # print(result[2].shape)
+            # print(result[3])
+            # print(result[3].shape)
             target_privte_code, target_share_code, _, target_rec_code = result
 
         target_diff= beta_weight * loss_diff(target_privte_code, target_share_code)
+        print(target_diff)
         loss += target_diff
         target_mse = alpha_weight * loss_recon1(target_rec_code, target_feature)
+        print(target_mse)
         loss += target_mse
         target_simse = alpha_weight * loss_recon2(target_rec_code, target_feature)
+        print(target_simse)
         loss += target_simse
 
         loss.backward()
@@ -169,7 +186,7 @@ for epoch in range(n_epoch):
         # source data training            #
         ###################################
 
-        data_source = data_source_iter.next()
+        data_source = next(data_source_iter)
         source_feature, source_label = data_source
 
         my_net.zero_grad()
@@ -189,22 +206,26 @@ for epoch in range(n_epoch):
             # activate domain loss
 
             result = my_net(input_data=source_feature, mode='source', rec_scheme='all', p=p)
-            source_privte_code, source_share_code, source_domain_label, source_class_label, source_rec_code = result
+            source_privte_code, source_share_code, source_domain_label, source_reg, source_rec_code = result
             source_dann = gamma_weight * loss_similarity(source_domain_label, domain_label)
             loss += source_dann
         else:
-            source_dann = Variable(torch.zeros(1).float().cuda())
+            source_dann = torch.zeros(1).float().cuda()
             result = my_net(input_data=source_feature, mode='source', rec_scheme='all')
             source_privte_code, source_share_code, _, source_reg, source_rec_code = result
 
-        source_classification = loss_reg(source_reg, source_label)
-        loss += source_classification
+        source_regression_loss = loss_reg(source_reg, source_label)
+        print(source_regression_loss)
+        loss += source_regression_loss
 
         source_diff = beta_weight * loss_diff(source_privte_code, source_share_code)
+        print(source_diff)
         loss += source_diff
         source_mse = alpha_weight * loss_recon1(source_rec_code, source_feature)
+        print(source_mse)
         loss += source_mse
         source_simse = alpha_weight * loss_recon2(source_rec_code, source_feature)
+        print(source_simse)
         loss += source_simse
 
         loss.backward()
@@ -213,21 +234,10 @@ for epoch in range(n_epoch):
 
         i += 1
         current_step += 1
-    print ('source_classification: %f, source_dann: %f, source_diff: %f, ' \
-          'source_mse: %f, source_simse: %f, target_dann: %f, target_diff: %f, ' \
-          'target_mse: %f, target_simse: %f' \
-          % (source_classification.data.cpu().numpy(), source_dann.data.cpu().numpy(), source_diff.data.cpu().numpy(),
-             source_mse.data.cpu().numpy(), source_simse.data.cpu().numpy(), target_dann.data.cpu().numpy(),
-             target_diff.data.cpu().numpy(),target_mse.data.cpu().numpy(), target_simse.data.cpu().numpy()))
-
-    # print 'step: %d, loss: %f' % (current_step, loss.cpu().data.numpy())
-    torch.save(my_net.state_dict(), model_root + '/dsn_mnist_mnistm_epoch_' + str(epoch) + '.pth')
-    test(epoch=epoch, name='mnist')
-    test(epoch=epoch, name='mnist_m')
+        
+    print('epoch: %d, loss: %f, source_regression_loss: %f, source_diff: %f, source_mse: %f, source_simse: %f, target_dann: %f, target_diff: %f, target_mse: %f, target_simse: %f' %
+          (epoch, loss.item(), source_regression_loss.item(), source_diff.item(), source_mse.item(), source_simse.item(), target_dann.item(), target_diff.item(), target_mse.item(), target_simse.item()))
+    print(loss.item())
+    torch.save(my_net.state_dict(), model_root + '/dsn_epoch_' + str(epoch) + '.pth')
 
 print ('done')
-
-
-
-
-
