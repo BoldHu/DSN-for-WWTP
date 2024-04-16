@@ -19,6 +19,8 @@ class GetLoader(data.Dataset):
         if self.transform:
             scaler = StandardScaler()
             self.data = scaler.fit_transform(self.data)
+            # standardize the labels
+            self.data_label = scaler.fit_transform(self.data_label)
         
     def __getitem__(self, item):
         d = self.data[item]

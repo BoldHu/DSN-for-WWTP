@@ -1,146 +1,97 @@
 import os
+import torch
 import torch.backends.cudnn as cudnn
 import torch.utils.data
-from torch.autograd import Variable
-from torchvision import transforms
 from data_loader import GetLoader
-from torchvision import datasets
 from model_compat import DSN
-import torchvision.utils as vutils
+from reg_functions import reg_indicator
+from remove_word import remove
 
-
-def test(epoch, name):
-
+def test(source_feature, source_label, target_feature, target_label, model=None):
     ###################
     # params          #
     ###################
     cuda = True
     cudnn.benchmark = True
-    batch_size = 64
-    image_size = 28
+    batch_size = 1344  # Adjust the batch size if necessary
 
     ###################
     # load data       #
     ###################
 
-    img_transform = transforms.Compose([
-        transforms.Resize(image_size),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5))
-    ])
+    source_dataset = GetLoader(source_feature, source_label, transform=True)
+    target_dataset = GetLoader(target_feature, target_label, transform=True)
+    
+    source_dataloader = torch.utils.data.DataLoader(
+        dataset=source_dataset,
+        batch_size=batch_size,
+        shuffle=False,  # No need to shuffle for testing
+        num_workers=4)  # Adjust according to your system capabilities
 
-    model_root = 'model'
-    if name == 'mnist':
-        mode = 'source'
-        image_root = os.path.join('dataset', 'mnist')
-        dataset = datasets.MNIST(
-            root=image_root,
-            train=False,
-            transform=img_transform
-        )
-
-        dataloader = torch.utils.data.DataLoader(
-            dataset=dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=8
-        )
-
-    elif name == 'mnist_m':
-        mode = 'target'
-        image_root = os.path.join('dataset', 'mnist_m', 'mnist_m_test')
-        test_list = os.path.join('dataset', 'mnist_m', 'mnist_m_test_labels.txt')
-
-        dataset = GetLoader(
-            data_root=image_root,
-            data_list=test_list,
-            transform=img_transform
-        )
-
-        dataloader = torch.utils.data.DataLoader(
-            dataset=dataset,
-            batch_size=batch_size,
-            shuffle=False,
-            num_workers=8
-        )
-
-    else:
-        print ('error dataset name')
+    target_dataloader = torch.utils.data.DataLoader(
+        dataset=target_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=4)
 
     ####################
     # load model       #
     ####################
-
-    my_net = DSN()
-    checkpoint = torch.load(os.path.join(model_root, 'dsn_mnist_mnistm_epoch_' + str(epoch) + '.pth'))
-    my_net.load_state_dict(checkpoint)
-    my_net.eval()
-
+    
+    if model is None:
+        source_clean_name = remove(source_feature)
+        target_clean_name = remove(target_feature)
+        model_path = os.path.join('models', f'DSN_model_{source_clean_name}_{target_clean_name}.pth')
+        model = torch.load(model_path)
+    else:
+        model = model
+        
     if cuda:
-        my_net = my_net.cuda()
+        model = model.cuda()
 
     ####################
-    # transform image  #
+    # testing          #
     ####################
+    
+    model.eval()  # Set the model to evaluation mode
 
+    with torch.no_grad():
+        source_r2, source_rmse, target_r2, target_rmse = [], [], [], []
 
-    def tr_image(img):
+        for data in source_dataloader:
+            source_features, source_labels = data
+            if cuda:
+                source_features = source_features.cuda()
+                source_labels = source_labels.cuda()
 
-        img_new = (img + 1) / 2
+            source_outputs = model(source_features, 'source', 'share', p=0)
+            source_reg = source_outputs[-1]  # Assuming reg output is the last in the list
 
-        return img_new
+            r2, rmse = reg_indicator(source_labels, source_reg)
+            source_r2.append(r2.item())
+            source_rmse.append(rmse.item())
 
+        for data in target_dataloader:
+            target_features, target_labels = data
+            if cuda:
+                target_features = target_features.cuda()
+                target_labels = target_labels.cuda()
 
-    len_dataloader = len(dataloader)
-    data_iter = iter(dataloader)
+            target_outputs = model(target_features, 'target', 'share', p=0)
+            target_reg = target_outputs[-1]  # Assuming reg output is the last in the list
 
-    i = 0
-    n_total = 0
-    n_correct = 0
+            r2, rmse = reg_indicator(target_labels, target_reg)
+            target_r2.append(r2.item())
+            target_rmse.append(rmse.item())
+            
+        source_r2_sum = sum(source_r2)
+        source_rmse_sum = sum(source_rmse)
+        target_r2_sum = sum(target_r2)
+        target_rmse_sum = sum(target_rmse)
 
-    while i < len_dataloader:
+    return source_r2_sum / len(source_dataloader), source_rmse_sum / len(source_dataloader), target_r2_sum / len(target_dataloader), target_rmse_sum / len(target_dataloader)
 
-        data_input = data_iter.next()
-        img, label = data_input
-
-        batch_size = len(label)
-
-        input_img = torch.FloatTensor(batch_size, 3, image_size, image_size)
-        class_label = torch.LongTensor(batch_size)
-
-        if cuda:
-            img = img.cuda()
-            label = label.cuda()
-            input_img = input_img.cuda()
-            class_label = class_label.cuda()
-
-        input_img.resize_as_(input_img).copy_(img)
-        class_label.resize_as_(label).copy_(label)
-        inputv_img = Variable(input_img)
-        classv_label = Variable(class_label)
-
-        result = my_net(input_data=inputv_img, mode='source', rec_scheme='share')
-        pred = result[3].data.max(1, keepdim=True)[1]
-
-        result = my_net(input_data=inputv_img, mode=mode, rec_scheme='all')
-        rec_img_all = tr_image(result[-1].data)
-
-        result = my_net(input_data=inputv_img, mode=mode, rec_scheme='share')
-        rec_img_share = tr_image(result[-1].data)
-
-        result = my_net(input_data=inputv_img, mode=mode, rec_scheme='private')
-        rec_img_private = tr_image(result[-1].data)
-
-        if i == len_dataloader - 2:
-            vutils.save_image(rec_img_all, name + '_rec_image_all.png', nrow=8)
-            vutils.save_image(rec_img_share, name + '_rec_image_share.png', nrow=8)
-            vutils.save_image(rec_img_private, name + '_rec_image_private.png', nrow=8)
-
-        n_correct += pred.eq(classv_label.data.view_as(pred)).cpu().sum()
-        n_total += batch_size
-
-        i += 1
-
-    accu = n_correct * 1.0 / n_total
-
-    print ('epoch: %d, accuracy of the %s dataset: %f' % (epoch, name, accu))
+# Example usage
+if __name__ == "__main__":
+    results = test('test_X_kla240.mat', 'test_EQvec_kla240.mat', 'test_X_mu0.7.mat', 'test_EQvec_mu0.7.mat')
+    print(results)
