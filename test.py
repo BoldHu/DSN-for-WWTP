@@ -7,7 +7,7 @@ from model_compat import DSN
 from reg_functions import reg_indicator
 from remove_word import remove
 
-def test(source_feature, source_label, target_feature, target_label, model=None):
+def test(source_feature, source_label, target_feature, target_label, my_net=None):
     ###################
     # params          #
     ###################
@@ -38,13 +38,13 @@ def test(source_feature, source_label, target_feature, target_label, model=None)
     # load model       #
     ####################
     
-    if model is None:
+    if my_net is None:
         source_clean_name = remove(source_feature)
         target_clean_name = remove(target_feature)
-        model_path = os.path.join('models', f'DSN_model_{source_clean_name}_{target_clean_name}.pth')
+        model_path = os.path.join('models', f'DSN4_model_{source_clean_name}_{target_clean_name}.pth')
         model = torch.load(model_path)
     else:
-        model = model
+        model = my_net
         
     if cuda:
         model = model.cuda()
@@ -63,9 +63,8 @@ def test(source_feature, source_label, target_feature, target_label, model=None)
             if cuda:
                 source_features = source_features.cuda()
                 source_labels = source_labels.cuda()
-
-            source_outputs = model(source_features, 'source', 'share', p=0)
-            source_reg = source_outputs[-1]  # Assuming reg output is the last in the list
+            
+            source_private, source_share, source_domian, source_reg, source_rec = model(source_features, 'source', 'all', p=0)
 
             r2, rmse = reg_indicator(source_labels, source_reg)
             source_r2.append(r2.item())
@@ -77,8 +76,7 @@ def test(source_feature, source_label, target_feature, target_label, model=None)
                 target_features = target_features.cuda()
                 target_labels = target_labels.cuda()
 
-            target_outputs = model(target_features, 'target', 'share', p=0)
-            target_reg = target_outputs[-1]  # Assuming reg output is the last in the list
+            target_private, target_share, target_domian, target_reg, target_rec = model(target_features, 'source', 'all', p=0)
 
             r2, rmse = reg_indicator(target_labels, target_reg)
             target_r2.append(r2.item())

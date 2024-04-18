@@ -1,0 +1,12 @@
+source_dataset_name,target_dataset_name,source_r2,source_RMSE,target_r2,target_RMSE
+X_kla240.mat,X_mu0.7.mat,0.8978049159049988,7272.4013671875,0.8526929020881653,8373.259765625
+source_dataset_name,target_dataset_name,source_r2,source_RMSE,target_r2,target_RMSE
+X_kla240.mat,X_mu0.9.mat,0.8978994488716125,7269.03759765625,0.7996174097061157,9499.4462890625
+source_dataset_name,target_dataset_name,source_r2,source_RMSE,target_r2,target_RMSE
+X_kla360.mat,X_mu0.7.mat,0.8977451920509338,7311.3935546875,0.8693583011627197,7885.39892578125
+source_dataset_name,target_dataset_name,source_r2,source_RMSE,target_r2,target_RMSE
+X_kla360.mat,X_mu0.9.mat,0.8978580832481384,7307.3564453125,0.815621018409729,9112.21484375
+source_dataset_name,target_dataset_name,source_r2,source_RMSE,target_r2,target_RMSE
+X_kla480.mat,X_mu0.7.mat,0.8979520797729492,7315.5634765625,0.8718798160552979,7808.93017578125
+source_dataset_name,target_dataset_name,source_r2,source_RMSE,target_r2,target_RMSE
+X_kla480.mat,X_mu0.9.mat,0.8981026411056519,7310.166015625,0.8169212341308594,9080.029296875

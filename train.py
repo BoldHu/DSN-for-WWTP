@@ -20,19 +20,19 @@ def train(source_feature, source_label, target_feature, target_label):
     model_root = 'models'
     cuda = True
     cudnn.benchmark = True
-    lr = 1e-2
+    lr = 1e-3
     batch_size = 32
     n_epoch = 100
     step_decay_weight = 0.9
     lr_decay_step = 10
-    active_domain_loss_step = 200
-    weight_decay = 1e-7
-    # alpha_weight = 0.001
+    active_domain_loss_step = 100
+    weight_decay = 1e-4
+    # alpha_weight = 0.01
     # beta_weight = 0.01
+    # gamma_weight = 0.1
     alpha_weight = 0.001
     beta_weight = 0.001
-    # gamma_weight = 0.1
-    gamma_weight = 0.001
+    gamma_weight = 1
     momentum = 0.9
 
     random.seed(42)
@@ -71,27 +71,27 @@ def train(source_feature, source_label, target_feature, target_label):
     #####################
 
 
-    def exp_lr_scheduler(optimizer, step, init_lr=lr, lr_decay_step=lr_decay_step, step_decay_weight=step_decay_weight):
+    # def exp_lr_scheduler(optimizer, step, init_lr=lr, lr_decay_step=lr_decay_step, step_decay_weight=step_decay_weight):
 
-        # Decay learning rate by a factor of step_decay_weight every lr_decay_step
-        current_lr = init_lr * (step_decay_weight ** (step / lr_decay_step))
+    #     # Decay learning rate by a factor of step_decay_weight every lr_decay_step
+    #     current_lr = init_lr * (step_decay_weight ** (step / lr_decay_step))
 
-        if step % lr_decay_step == 0:
-            print ('learning rate is set to %f' % current_lr)
+    #     if step % lr_decay_step == 0:
+    #         print ('learning rate is set to %f' % current_lr)
 
-        for param_group in optimizer.param_groups:
-            param_group['lr'] = current_lr
+    #     for param_group in optimizer.param_groups:
+    #         param_group['lr'] = current_lr
 
-        return optimizer
+    #     return optimizer
 
 
-    optimizer = optim.SGD(my_net.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
-
+    # optimizer = optim.SGD(my_net.parameters(), lr=lr, momentum=momentum, weight_decay=weight_decay)
+    optimizer = optim.Adam(my_net.parameters(), lr=lr, weight_decay=weight_decay, betas=(0.9, 0.999))
     loss_reg = torch.nn.MSELoss()
     loss_recon1 = MSE()
     loss_recon2 = SIMSE()
     loss_diff = DiffLoss()
-    loss_similarity = torch.nn.CrossEntropyLoss()
+    loss_similarity = torch.nn.NLLLoss()
 
     if cuda:
         my_net = my_net.cuda()
@@ -115,7 +115,7 @@ def train(source_feature, source_label, target_feature, target_label):
     source_r2_list = []
     source_RMSE_list = []
 
-    current_step = 0
+    current_step = 1
     for epoch in range(n_epoch):
 
         data_source_iter = iter(dataloader_source)
@@ -133,6 +133,8 @@ def train(source_feature, source_label, target_feature, target_label):
 
             data_target = next(data_target_iter)
             target_feature, target_label = data_target
+            # print(target_feature)
+            # print(target_label)
 
             my_net.zero_grad()
             loss = 0
@@ -148,6 +150,7 @@ def train(source_feature, source_label, target_feature, target_label):
 
             if current_step > active_domain_loss_step:
                 p = float(i + (epoch - dann_epoch) * len_dataloader / (n_epoch - dann_epoch) / len_dataloader)
+                # print('p:', p)
                 p = 2. / (1. + np.exp(-10 * p)) - 1
 
                 # activate domain loss
@@ -222,7 +225,7 @@ def train(source_feature, source_label, target_feature, target_label):
             loss -= source_simse
 
             loss.backward()
-            optimizer = exp_lr_scheduler(optimizer=optimizer, step=current_step)
+            # optimizer = exp_lr_scheduler(optimizer=optimizer, step=current_step)
             optimizer.step()
 
             i += 1
@@ -253,5 +256,5 @@ def train(source_feature, source_label, target_feature, target_label):
     target_dataset_name = remove(target_dataset_name)
     
     # save the model
-    torch.save(my_net, os.path.join(model_root, 'DSN_model_' + source_dataset_name + '_' + target_dataset_name + '.pth'))
+    torch.save(my_net, os.path.join(model_root, 'DSN4_model_' + source_dataset_name + '_' + target_dataset_name + '.pth'))
     print ('done')

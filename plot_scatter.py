@@ -34,7 +34,7 @@ def plot_scatter(source_feature, source_label, target_feature, target_label, tas
     # load model in saved_models
     source_dataset_name = remove(source_dataset_name)
     target_dataset_name = remove(target_dataset_name)
-    my_net = torch.load(os.path.join('models', source_dataset_name + '_' + target_dataset_name + '.pth'))
+    my_net = torch.load(os.path.join('models', 'DSN1_model_' + source_dataset_name + '_' + target_dataset_name + '.pth'))
     
     # get the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -47,18 +47,23 @@ def plot_scatter(source_feature, source_label, target_feature, target_label, tas
     target_labels = []
     
     with torch.no_grad():
-        for test_features, test_labels in dataloader_target:
-            test_features = test_features.to(device)
-            output, _ = my_net(input_data=test_features, alpha=alpha)
-            target_outputs.extend(output.cpu().numpy())
-            target_labels.extend(test_labels.cpu().numpy())
+        for target_test_feature, target_test_label in dataloader_target:
+            target_test_feature = target_test_feature.to(device)
+            # predict the value
+            _, _, _, target_outputs_tensor, _ = my_net(target_test_feature, 'source', 'all', alpha)
+            target_outputs.extend(target_outputs_tensor.cpu().numpy())
+            target_labels.extend(target_test_label.cpu().numpy())
 
-        for test_features, test_labels in dataloader_source:
-            test_features = test_features.to(device)
-            output, _ = my_net(input_data=test_features, alpha=alpha)
-            source_outputs.extend(output.cpu().numpy())
-            source_labels.extend(test_labels.cpu().numpy())
+        for source_test_feature, source_test_label in dataloader_source:
+            source_test_feature = source_test_feature.to(device)
+            # predict the value
+            _, _, _, source_outputs_tensor, _ = my_net(source_test_feature, 'source', 'all', alpha)
+            source_outputs.extend(source_outputs_tensor.cpu().numpy())
+            source_labels.extend(source_test_label.cpu().numpy())
     
+    # create a folder to save the figures
+    if not os.path.exists('figures/DSN1'):
+        os.makedirs('figures/DSN1')
     # plot scatter with source_output, source_label and target_output, target_label
     plt.figure(figsize=(7, 5))
     plt.scatter(source_outputs, source_labels, color='blue', alpha=0.5, label='Source data')
@@ -76,7 +81,7 @@ def plot_scatter(source_feature, source_label, target_feature, target_label, tas
     plt.legend()
 
     # save the plot with souce and target dataset names
-    plt.savefig(os.path.join('figures', 'scatter_plot_' + source_dataset_name + '_' + target_dataset_name + '.png'))
+    plt.savefig(os.path.join('figures/DSN4', 'scatter_plot_' + source_dataset_name + '_' + target_dataset_name + '.png'))
     plt.show()
 
 if __name__ == "__main__":

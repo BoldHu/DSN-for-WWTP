@@ -62,7 +62,7 @@ def TL_experiment():
                                                             target_label=test_target_label_name)
         
         # write the results to the .csv file in process_data folder with the column name
-        with open('process_data/results.csv', mode='a') as results_file:
+        with open('process_data/results4.csv', mode='a') as results_file:
             results_writer = csv.writer(results_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
             results_writer.writerow(['source_dataset_name', 'target_dataset_name', 'source_r2', 'source_RMSE', 'target_r2', 'target_RMSE'])
             results_writer.writerow([remove(train_source_dataset_name), remove(train_target_dataset_name), source_r2, source_RMSE,target_r2, target_RMSE])
