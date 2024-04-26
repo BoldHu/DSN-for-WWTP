@@ -34,7 +34,7 @@ def plot_scatter(source_feature, source_label, target_feature, target_label, tas
     # load model in saved_models
     source_dataset_name = remove(source_dataset_name)
     target_dataset_name = remove(target_dataset_name)
-    my_net = torch.load(os.path.join('models', 'DSN1_model_' + source_dataset_name + '_' + target_dataset_name + '.pth'))
+    my_net = torch.load(os.path.join('models', 'DSN5_model_' + source_dataset_name + '_' + target_dataset_name + '.pth'))
     
     # get the device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -62,8 +62,8 @@ def plot_scatter(source_feature, source_label, target_feature, target_label, tas
             source_labels.extend(source_test_label.cpu().numpy())
     
     # create a folder to save the figures
-    if not os.path.exists('figures/DSN1'):
-        os.makedirs('figures/DSN1')
+    if not os.path.exists('figures/DSN5'):
+        os.makedirs('figures/DSN5')
     # plot scatter with source_output, source_label and target_output, target_label
     plt.figure(figsize=(7, 5))
     plt.scatter(source_outputs, source_labels, color='blue', alpha=0.5, label='Source data')
@@ -81,7 +81,7 @@ def plot_scatter(source_feature, source_label, target_feature, target_label, tas
     plt.legend()
 
     # save the plot with souce and target dataset names
-    plt.savefig(os.path.join('figures/DSN4', 'scatter_plot_' + source_dataset_name + '_' + target_dataset_name + '.png'))
+    plt.savefig(os.path.join('figures/DSN5', 'scatter_plot_' + source_dataset_name + '_' + target_dataset_name + '.png'))
     plt.show()
 
 if __name__ == "__main__":

@@ -21,7 +21,7 @@ def train(source_feature, source_label, target_feature, target_label):
     cuda = True
     cudnn.benchmark = True
     lr = 1e-3
-    batch_size = 32
+    batch_size = 128
     n_epoch = 100
     step_decay_weight = 0.9
     lr_decay_step = 10
@@ -256,5 +256,5 @@ def train(source_feature, source_label, target_feature, target_label):
     target_dataset_name = remove(target_dataset_name)
     
     # save the model
-    torch.save(my_net, os.path.join(model_root, 'DSN4_model_' + source_dataset_name + '_' + target_dataset_name + '.pth'))
+    torch.save(my_net, os.path.join(model_root, 'DSN5_model_' + source_dataset_name + '_' + target_dataset_name + '.pth'))
     print ('done')

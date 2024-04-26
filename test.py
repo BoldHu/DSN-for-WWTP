@@ -41,7 +41,7 @@ def test(source_feature, source_label, target_feature, target_label, my_net=None
     if my_net is None:
         source_clean_name = remove(source_feature)
         target_clean_name = remove(target_feature)
-        model_path = os.path.join('models', f'DSN4_model_{source_clean_name}_{target_clean_name}.pth')
+        model_path = os.path.join('models', f'DSN5_model_{source_clean_name}_{target_clean_name}.pth')
         model = torch.load(model_path)
     else:
         model = my_net
